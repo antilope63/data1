@@ -383,10 +383,10 @@ file_important_columns = {
 #     clean_missing_data_csv(csv_file, important_columns)
 
 
-filter_weather_by_circuit_and_date(
-    pd.read_parquet("weather.parquet"),
-    pd.read_csv("circuits.csv"),
-    pd.read_csv("races.csv"),
-    radius_km=20,
-    time_window_days=1,
-)
+# filter_weather_by_circuit_and_date(
+#     pd.read_parquet("weather.parquet"),
+#     pd.read_csv("circuits.csv"),
+#     pd.read_csv("races.csv"),
+#     radius_km=20,
+#     time_window_days=1,
+# )
