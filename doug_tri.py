@@ -89,60 +89,38 @@ def filter_by_date(parquet_file, races_file):
 
 
 def haversine_np(lon1, lat1, lon2, lat2):
-    """
-    Vectorized Haversine function to compute the distance between arrays of coordinates.
-    """
-    # Convert decimal degrees to radians
     lon1, lat1, lon2, lat2 = map(np.radians, [lon1, lat1, lon2, lat2])
-
     dlon = lon2 - lon1
     dlat = lat2 - lat1
     a = np.sin(dlat / 2.0) ** 2 + np.cos(lat1) * np.cos(lat2) * np.sin(dlon / 2.0) ** 2
     c = 2 * np.arcsin(np.sqrt(a))
-    km = 6371 * c  # Radius of Earth in kilometers
+    km = 6371 * c
     return km
 
 
 def filter_weather_by_circuit_and_date(
     weather_df, circuits_df, races_df, radius_km=20, time_window_days=1
 ):
-    # Remove spaces around column names
     circuits_df.columns = circuits_df.columns.str.strip()
     races_df.columns = races_df.columns.str.strip()
-
-    # Merge races and circuits data on 'circuitId'
     race_circuits_df = pd.merge(races_df, circuits_df, on="circuitId", how="inner")
-
-    # Display columns after merge for verification
     print("Columns after merge:", race_circuits_df.columns)
-
-    # Check columns in weather_df
     print("Columns in weather_df:", weather_df.columns)
-
-    # Convert date columns to datetime
     race_circuits_df["race_datetime"] = pd.to_datetime(
         race_circuits_df["date"] + " " + race_circuits_df["time"], errors="coerce"
     )
     weather_df["weather_datetime"] = pd.to_datetime(
         weather_df["apply_time_rl"], unit="s", errors="coerce"
     )
-
-    # Initialize an empty DataFrame
     filtered_weather = pd.DataFrame()
-
-    # Prepare arrays for weather data
     weather_lats = weather_df["fact_latitude"].values
     weather_lons = weather_df["fact_longitude"].values
     weather_times = weather_df["weather_datetime"]
-
-    # Ensure weather_times is a Pandas Series of Timestamps
     weather_times = pd.to_datetime(weather_times)
 
     for index, circuit in race_circuits_df.iterrows():
         circuit_lat = circuit["lat"]
         circuit_lng = circuit["lng"]
-
-        # Use 'name_x' or 'name_y' based on availability
         circuit_name = circuit.get("name_x") or circuit.get("name_y")
         if not circuit_name:
             print(
@@ -151,8 +129,6 @@ def filter_weather_by_circuit_and_date(
             continue
 
         race_time = circuit["race_datetime"]
-
-        # Skip if race_time is NaT
         if pd.isnull(race_time):
             print(f"Skipping circuit {circuit_name} due to invalid race time.")
             continue
@@ -160,34 +136,21 @@ def filter_weather_by_circuit_and_date(
         print(
             f"Processing circuit: {circuit_name} at ({circuit_lat}, {circuit_lng}) on {race_time}"
         )
-
-        # Compute distances using the vectorized Haversine function
         distances = haversine_np(weather_lons, weather_lats, circuit_lng, circuit_lat)
-
-        # Compute time differences in hours
         time_differences = (weather_times - race_time).abs().dt.total_seconds() / 3600
         time_differences = time_differences.astype(int)
-
-        # Filter weather data within the radius and time window
         radius_mask = distances <= radius_km
-        time_mask = time_differences <= (time_window_days * 24)  # Convert days to hours
-
+        time_mask = time_differences <= (time_window_days * 24)
         combined_mask = radius_mask & time_mask
-
         weather_near_circuit = weather_df[combined_mask].copy()
         weather_near_circuit["circuit_name"] = circuit_name
         weather_near_circuit["race_datetime"] = race_time
-
         filtered_weather = pd.concat([filtered_weather, weather_near_circuit])
-
-    # Remove duplicates if any
     filtered_weather.drop_duplicates(inplace=True)
-
-    # Save the filtered data with headers
     filtered_weather.to_csv(
         "filtered_weather_by_date_and_localisation.csv",
-        index=False,  # Do not include index column
-        header=True,  # Include headers
+        index=False,
+        header=True,
     )
     print("Filtered weather data saved successfully.")
 
