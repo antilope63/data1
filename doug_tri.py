@@ -1,6 +1,6 @@
 import pandas as pd
-from scipy.spatial import KDTree
 from geopy.distance import geodesic
+import numpy as np
 
 
 def readParquet(file):
@@ -86,6 +86,73 @@ def filter_by_date(parquet_file, races_file):
         print(
             "Aucune correspondance trouvée entre les dates des courses et les données météo."
         )
+
+
+def haversine_np(lon1, lat1, lon2, lat2):
+    lon1, lat1, lon2, lat2 = map(np.radians, [lon1, lat1, lon2, lat2])
+    dlon = lon2 - lon1
+    dlat = lat2 - lat1
+    a = np.sin(dlat / 2.0) ** 2 + np.cos(lat1) * np.cos(lat2) * np.sin(dlon / 2.0) ** 2
+    c = 2 * np.arcsin(np.sqrt(a))
+    km = 6371 * c
+    return km
+
+
+def filter_weather_by_circuit_and_date(
+    weather_df, circuits_df, races_df, radius_km=20, time_window_days=1
+):
+    circuits_df.columns = circuits_df.columns.str.strip()
+    races_df.columns = races_df.columns.str.strip()
+    race_circuits_df = pd.merge(races_df, circuits_df, on="circuitId", how="inner")
+    print("Columns after merge:", race_circuits_df.columns)
+    print("Columns in weather_df:", weather_df.columns)
+    race_circuits_df["race_datetime"] = pd.to_datetime(
+        race_circuits_df["date"] + " " + race_circuits_df["time"], errors="coerce"
+    )
+    weather_df["weather_datetime"] = pd.to_datetime(
+        weather_df["apply_time_rl"], unit="s", errors="coerce"
+    )
+    filtered_weather = pd.DataFrame()
+    weather_lats = weather_df["fact_latitude"].values
+    weather_lons = weather_df["fact_longitude"].values
+    weather_times = weather_df["weather_datetime"]
+    weather_times = pd.to_datetime(weather_times)
+
+    for index, circuit in race_circuits_df.iterrows():
+        circuit_lat = circuit["lat"]
+        circuit_lng = circuit["lng"]
+        circuit_name = circuit.get("name_x") or circuit.get("name_y")
+        if not circuit_name:
+            print(
+                "The 'name' column or its variants do not exist in the merged DataFrame."
+            )
+            continue
+
+        race_time = circuit["race_datetime"]
+        if pd.isnull(race_time):
+            print(f"Skipping circuit {circuit_name} due to invalid race time.")
+            continue
+
+        print(
+            f"Processing circuit: {circuit_name} at ({circuit_lat}, {circuit_lng}) on {race_time}"
+        )
+        distances = haversine_np(weather_lons, weather_lats, circuit_lng, circuit_lat)
+        time_differences = (weather_times - race_time).abs().dt.total_seconds() / 3600
+        time_differences = time_differences.astype(int)
+        radius_mask = distances <= radius_km
+        time_mask = time_differences <= (time_window_days * 24)
+        combined_mask = radius_mask & time_mask
+        weather_near_circuit = weather_df[combined_mask].copy()
+        weather_near_circuit["circuit_name"] = circuit_name
+        weather_near_circuit["race_datetime"] = race_time
+        filtered_weather = pd.concat([filtered_weather, weather_near_circuit])
+    filtered_weather.drop_duplicates(inplace=True)
+    filtered_weather.to_csv(
+        "filtered_weather_by_date_and_localisation.csv",
+        index=False,
+        header=True,
+    )
+    print("Filtered weather data saved successfully.")
 
 
 def clean_missing_data(parquet_file, important_columns):
@@ -292,14 +359,14 @@ file_important_columns = {
 
 
 # supprimes les colonnes inutiles
-dropColumnsParquet("weather.parquet", columns_to_drop)
+# dropColumnsParquet("weather.parquet", columns_to_drop)
 
 # filtre les données meteo en fonction des courses ayant eu lieu avec les mêmes dates
-filter_by_date("weather.parquet", "races.csv")
+# filter_by_date("weather.parquet", "races.csv")
 
 
 # clean_missing_data("weather.parquet", important_columns)
-clean_missing_data("filtered_weather_by_date.parquet", important_columns)
+# clean_missing_data("filtered_weather_by_date.parquet", important_columns)
 
 
 # verification des modifications
@@ -309,8 +376,17 @@ clean_missing_data("filtered_weather_by_date.parquet", important_columns)
 # list_csv_columns(file_list)
 
 
-for csv_file, unimportant_columns in file_unimportant_columns.items():
-    dropColumnsCSV(csv_file, unimportant_columns)
+# for csv_file, unimportant_columns in file_unimportant_columns.items():
+#     dropColumnsCSV(csv_file, unimportant_columns)
 
-for csv_file, important_columns in file_important_columns.items():
-    clean_missing_data_csv(csv_file, important_columns)
+# for csv_file, important_columns in file_important_columns.items():
+#     clean_missing_data_csv(csv_file, important_columns)
+
+
+filter_weather_by_circuit_and_date(
+    pd.read_parquet("weather.parquet"),
+    pd.read_csv("circuits.csv"),
+    pd.read_csv("races.csv"),
+    radius_km=20,
+    time_window_days=1,
+)
