@@ -1,6 +1,4 @@
 import pandas as pd
-from geopy.distance import geodesic
-import numpy as np
 
 
 def readParquet(file):
@@ -53,39 +51,84 @@ def filter_weather_by_race_info(weather_file, races_info, output_file):
 races_info = get_race_info("races.csv", "circuits.csv")
 
 # Filtrage des données météo et sauvegarde
-filter_weather_by_race_info(
-    "daily_weather.parquet", races_info, "filtered_weather.csv"
-)
+# filter_weather_by_race_info("daily_weather.parquet", races_info, "filtered_weather.csv")
 
 
 # print(readParquet("daily_weather.parquet"))
 # list_columns("daily_weather.parquet")
 
 
-def check_locations_in_weather(circuits_file, weather_file):
+def get_missing_weather_circuits(
+    circuits_file, weather_file, cities_file, countries_file, output_file
+):
     circuits = pd.read_csv(circuits_file)
-    unique_locations = circuits["location"].unique()
-
     weather_data = pd.read_parquet(weather_file)
+    cities = pd.read_csv(cities_file)
+    countries = pd.read_csv(countries_file)
+
+    unique_locations = circuits["location"].unique()
     weather_cities = weather_data["city_name"].unique()
+    missing_locations = [
+        location for location in unique_locations if location not in weather_cities
+    ]
 
-    missing_locations = []
-    for location in unique_locations:
-        if location not in weather_cities:
-            missing_locations.append(location)
-            print(f"Ville manquante dans le fichier météo : {location}")
+    print(f"Villes sans données météo : {missing_locations}")
 
-    print(f"Nombre de villes manquantes dans {weather_file} : {len(missing_locations)}")
+    new_weather_data = []
 
-    return missing_locations
+    for missing_location in missing_locations:
+        circuit_country = circuits[circuits["location"] == missing_location][
+            "country"
+        ].values[0]
+        print(f"Récupération des données pour le pays : {circuit_country}")
+
+        cities_in_country = cities[cities["country"] == circuit_country][
+            "city_name"
+        ].unique()
+        country_weather_data = weather_data[
+            weather_data["city_name"].isin(cities_in_country)
+        ]
+
+        if not country_weather_data.empty:
+            avg_weather = country_weather_data.mean(numeric_only=True)
+            print(
+                f"Moyenne des données météo pour {missing_location} (basée sur les villes environnantes) :\n{avg_weather}"
+            )
+
+            # Ajouter les informations du circuit et de la moyenne météo dans le DataFrame
+            avg_weather["location"] = missing_location
+            avg_weather["country"] = circuit_country
+
+            # Ajouter ces nouvelles données météo au fichier
+            new_weather_data.append(avg_weather)
+        else:
+            print(
+                f"Aucune donnée météo trouvée pour les villes du pays {circuit_country}. Ignoré."
+            )
+
+    # Si des données ont été calculées, on les ajoute au fichier principal
+    if new_weather_data:
+        new_weather_df = pd.DataFrame(new_weather_data)
+        combined_weather_data = pd.concat(
+            [weather_data, new_weather_df], ignore_index=True
+        )
+
+        # Sauvegarder le fichier avec les nouvelles données
+        combined_weather_data.to_csv(output_file, index=False)
+        print(
+            f"Les nouvelles données météo ont été ajoutées et sauvegardées dans {output_file}"
+        )
+    else:
+        print("Aucune nouvelle donnée à ajouter.")
+
+    print("Traitement terminé.")
 
 
-# # Vérification des villes dans deux fichiers météo différents
-# a = check_locations_in_weather("circuits.csv", "archive-2/daily_weather.parquet")
-# b = check_locations_in_weather("circuits.csv", "daily_weather.parquet")
-
-# # Concaténer les deux listes de villes manquantes
-# c = list(set(a + b))
-
-# print(f"Nombre total de villes manquantes dans les deux fichiers : {len(c)}")
-# print(f"Villes manquantes uniques : {c}")
+# Utilisation du code
+# get_missing_weather_circuits(
+#     "circuits.csv",
+#     "daily_weather.parquet",
+#     "cities.csv",
+#     "countries.csv",
+#     "weather_data_with_estimates.csv",
+# )
