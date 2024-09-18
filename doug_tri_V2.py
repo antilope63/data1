@@ -50,16 +50,16 @@ def filter_weather_by_race_info(weather_file, races_info, output_file):
     print(f"Les données météo filtrées ont été sauvegardées dans {output_file}")
 
 
-# races_info = get_race_info("races.csv", "circuits.csv")
+races_info = get_race_info("races.csv", "circuits.csv")
 
-# # Filtrage des données météo et sauvegarde
-# filter_weather_by_race_info(
-#     "daily_weather.parquet", races_info, "filtered_weather.csv"
-# )
+# Filtrage des données météo et sauvegarde
+filter_weather_by_race_info(
+    "daily_weather.parquet", races_info, "filtered_weather.csv"
+)
 
 
-print(readParquet("daily_weather.parquet"))
-list_columns("daily_weather.parquet")
+# print(readParquet("daily_weather.parquet"))
+# list_columns("daily_weather.parquet")
 
 
 def check_locations_in_weather(circuits_file, weather_file):
