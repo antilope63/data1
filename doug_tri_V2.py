@@ -38,7 +38,9 @@ def get_race_info(races_file, circuits_file):
     races = pd.read_csv(races_file)
     circuits = pd.read_csv(circuits_file)
     races_with_circuits = pd.merge(races, circuits, on="circuitId")
-    races_info = races_with_circuits[["circuitId", "location", "date", "country"]]
+    races_info = races_with_circuits[
+        ["raceId", "circuitId", "location", "date", "country"]
+    ]
     races_info.loc[:, "date"] = pd.to_datetime(races_info["date"])
 
     return races_info
@@ -55,6 +57,9 @@ def filter_weather_by_race_info(weather_file, races_info, cities_file, output_fi
         location = race["location"]
         race_date = race["date"]
         circuit_country = race["country"]
+        race_id = race["raceId"]
+        circuit_id = race["circuitId"]
+
         weather_for_race = weather_data[
             (weather_data["city_name"] == location)
             & (weather_data["date"] == race_date)
@@ -62,6 +67,8 @@ def filter_weather_by_race_info(weather_file, races_info, cities_file, output_fi
 
         if not weather_for_race.empty:
             print(f"Météo trouvée pour {location} à la date {race_date}")
+            weather_for_race["raceId"] = race_id
+            weather_for_race["circuitId"] = circuit_id
             filtered_weather = pd.concat([filtered_weather, weather_for_race])
         else:
             print(
@@ -82,6 +89,8 @@ def filter_weather_by_race_info(weather_file, races_info, cities_file, output_fi
                 avg_weather["city_name"] = location
                 avg_weather["date"] = race_date
                 avg_weather["season"] = season
+                avg_weather["raceId"] = race_id
+                avg_weather["circuitId"] = circuit_id
                 avg_weather = avg_weather[
                     [
                         "station_id",
@@ -98,6 +107,8 @@ def filter_weather_by_race_info(weather_file, races_info, cities_file, output_fi
                         "peak_wind_gust_kmh",
                         "avg_sea_level_pres_hpa",
                         "sunshine_total_min",
+                        "raceId",
+                        "circuitId",
                     ]
                 ]
 
