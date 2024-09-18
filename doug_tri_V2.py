@@ -58,62 +58,70 @@ races_info = get_race_info("races.csv", "circuits.csv")
 # list_columns("daily_weather.parquet")
 
 
-def get_missing_weather_circuits(
-    circuits_file, weather_file, cities_file, countries_file, output_file
+import pandas as pd
+
+
+def get_missing_weather_for_cities(
+    circuits_file, cities_file, weather_file, output_file
 ):
+    # Charger les fichiers
     circuits = pd.read_csv(circuits_file)
-    weather_data = pd.read_parquet(weather_file)
     cities = pd.read_csv(cities_file)
-    countries = pd.read_csv(countries_file)
+    weather_data = pd.read_parquet(weather_file)
 
-    unique_locations = circuits["location"].unique()
-    weather_cities = weather_data["city_name"].unique()
-    missing_locations = [
-        location for location in unique_locations if location not in weather_cities
-    ]
-
-    print(f"Villes sans données météo : {missing_locations}")
-
+    # Initialiser un DataFrame pour stocker les nouvelles données météo
     new_weather_data = []
 
-    for missing_location in missing_locations:
-        circuit_country = circuits[circuits["location"] == missing_location][
-            "country"
-        ].values[0]
-        print(f"Récupération des données pour le pays : {circuit_country}")
+    # Parcourir chaque ville manquante dans circuits.csv
+    for index, circuit in circuits.iterrows():
+        circuit_city = circuit["location"]
+        circuit_country = circuit["country"]
 
+        # Trouver toutes les villes dans le même pays
         cities_in_country = cities[cities["country"] == circuit_country][
             "city_name"
         ].unique()
-        country_weather_data = weather_data[
+
+        # Récupérer la météo pour ces villes
+        weather_for_country = weather_data[
             weather_data["city_name"].isin(cities_in_country)
         ]
 
-        if not country_weather_data.empty:
-            avg_weather = country_weather_data.mean(numeric_only=True)
+        # Si des données météo sont trouvées, calculer la moyenne
+        if not weather_for_country.empty:
+            avg_weather = weather_for_country.mean(numeric_only=True).round(
+                1
+            )  # Arrondir à 1 chiffre après la virgule
             print(
-                f"Moyenne des données météo pour {missing_location} (basée sur les villes environnantes) :\n{avg_weather}"
+                f"Moyenne des données météo pour {circuit_city} (basée sur les villes environnantes dans {circuit_country}) :\n{avg_weather}"
             )
 
-            # Ajouter les informations du circuit et de la moyenne météo dans le DataFrame
-            avg_weather["location"] = missing_location
-            avg_weather["country"] = circuit_country
+            # Ajouter la localisation (city_name) au lieu de country
+            avg_weather["city_name"] = circuit_city  # Ajouter le nom de la ville
 
-            # Ajouter ces nouvelles données météo au fichier
+            # Stocker les nouvelles données météo
             new_weather_data.append(avg_weather)
         else:
             print(
-                f"Aucune donnée météo trouvée pour les villes du pays {circuit_country}. Ignoré."
+                f"Aucune donnée météo trouvée pour les villes de {circuit_country}. Ignoré."
             )
 
-    # Si des données ont été calculées, on les ajoute au fichier principal
+    # Si des nouvelles données sont disponibles, les ajouter au fichier de sortie
     if new_weather_data:
         new_weather_df = pd.DataFrame(new_weather_data)
+
+        # Charger le fichier filtered_weather.csv s'il existe déjà
+        try:
+            filtered_weather = pd.read_csv(output_file)
+        except FileNotFoundError:
+            filtered_weather = pd.DataFrame()
+
+        # Concaténer les nouvelles données avec les anciennes
         combined_weather_data = pd.concat(
-            [weather_data, new_weather_df], ignore_index=True
+            [filtered_weather, new_weather_df], ignore_index=True
         )
 
-        # Sauvegarder le fichier avec les nouvelles données
+        # Sauvegarder le nouveau fichier avec les données mises à jour
         combined_weather_data.to_csv(output_file, index=False)
         print(
             f"Les nouvelles données météo ont été ajoutées et sauvegardées dans {output_file}"
@@ -121,14 +129,8 @@ def get_missing_weather_circuits(
     else:
         print("Aucune nouvelle donnée à ajouter.")
 
-    print("Traitement terminé.")
-
 
 # Utilisation du code
-# get_missing_weather_circuits(
-#     "circuits.csv",
-#     "daily_weather.parquet",
-#     "cities.csv",
-#     "countries.csv",
-#     "weather_data_with_estimates.csv",
-# )
+get_missing_weather_for_cities(
+    "circuits.csv", "cities.csv", "daily_weather.parquet", "filtered_weather.csv"
+)
