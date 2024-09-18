@@ -21,7 +21,7 @@ def get_race_cities(circuits_file):
     return race_cities
 
 
-# j'arrive pas à acceder à aux saisons
+# j'arrive pas à acceder à aux saisons donc je fais artificiellement
 def get_season(date):
     month = date.month
     if month in [12, 1, 2]:

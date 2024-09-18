@@ -1,5 +1,2 @@
-pandas
-pyarrow
-geopy
-spicy
+pandas == 2.2.2 # avertissement de pandas de futur changement sur les dataframes
 numpy
