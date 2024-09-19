@@ -1,2 +1,6 @@
-pandas == 2.2.2 # avertissement de pandas de futur changement sur les dataframes
+pandas == 2.2.2 # précision de la version car avertissement de pandas sur de futur changement sur les dataframes
 numpy
+scikit-learn
+streamlit
+matplotlib
+seaborn
