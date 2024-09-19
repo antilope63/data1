@@ -4,10 +4,10 @@ import numpy as np
 import joblib
 import os
 
+
 # Chargement du modèle
 model = joblib.load("race_predictor_model.pkl")
 
-# Chargement des encodeurs
 le_constructor = joblib.load("le_constructor.joblib")
 le_driver = joblib.load("le_driver.joblib")
 
@@ -18,16 +18,59 @@ results_data = pd.read_csv("results.csv")
 constructors = pd.read_csv("constructors.csv")
 races = pd.read_csv("races.csv")
 
+
+# Dictionnaire de correspondance entre les noms des images et les noms des circuits
+circuits["image_path"] = ""
+image_folder = "images_circuits/"
+image_name_mapping = {
+    "bahrein": "Bahrain International Circuit",
+    "Jeddah_Corniche": "Jeddah Corniche Circuit",
+    "Melbourne": "Albert Park Grand Prix Circuit",
+    "Enzo_e_Dino": "Autodromo Enzo e Dino Ferrari",
+    "Miami": "Miami International Autodrome",
+    "Barcelona-Catalunya": "Circuit de Barcelona-Catalunya",
+    "Monaco": "Circuit de Monaco",
+    "Baku_City": "Baku City Circuit",
+    "Gilles-Villeneuve": "Circuit Gilles Villeneuve",
+    "Silverstone": "Silverstone Circuit",
+    "Red_Bull_Ring": "Red Bull Ring",
+    "Paul_Ricard": "Circuit Paul Ricard",
+    "Magyar_Nagydij": "Hungaroring",
+    "Spa-Francorchamps": "Circuit de Spa-Francorchamps",
+    "Zandvoort": "Circuit Park Zandvoort",
+    "Autodromo_Nazionale_Monza": "Autodromo Nazionale di Monza",
+    "Sochi": "Sochi Autodrom",
+    "Marina_Bay_Street": "Marina Bay Street Circuit",
+    "Suzuka_International_Racing": "Suzuka Circuit",
+    "Circuit_of_The_Americas": "Circuit of the Americas",
+    "Hermanos_Rodríguez": "Autódromo Hermanos Rodríguez",
+    "José_Carlos_Pace": "Autódromo José Carlos Pace",
+    "Yas_Marina": "Yas Marina Circuit",
+}
+
+# Parcourir le dictionnaire de correspondance
+for image_name, circuit_name in image_name_mapping.items():
+    circuit_indices = circuits[circuits["name"] == circuit_name].index
+
+    if not circuit_indices.empty:
+        index = circuit_indices[0]
+        # Construire le chemin de l'image
+        image_path = os.path.join(
+            image_folder, image_name + ".webp"
+        )  # Ou .png selon le format
+        # Mettre à jour le DataFrame
+        circuits.at[index, "image_path"] = image_path
+
 # Titre de l'application
 st.title("Simulateur de F1 avec Conditions Météorologiques")
 
 # Sélection de l'année
 st.subheader("Sélection de l'Année")
-year_options = sorted(races["year"].unique())
+year_options = sorted(races["year"].unique(), reverse=True)
 selected_year = st.selectbox("Sélectionnez une année", year_options)
 
 # Sélection du circuit
-circuit_names = circuits["name"].unique()
+circuit_names = sorted(circuits["name"].unique())
 selected_circuit = st.selectbox("Sélectionnez un circuit", circuit_names)
 
 # Récupération des informations du circuit sélectionné
@@ -53,7 +96,7 @@ avg_wind_speed_kmh = st.slider(
     "Vitesse moyenne du vent (km/h)", min_value=0, max_value=100, value=10
 )
 
-# Récupérer les races de l'année sélectionnée
+# Récupérer les courses de l'année sélectionnée
 races_selected_year = races[races["year"] == selected_year]
 race_ids = races_selected_year["raceId"].unique()
 
@@ -144,24 +187,19 @@ if st.button("Lancer la simulation"):
     # Réordonner les colonnes selon l'ordre des features du modèle
     input_data = input_data[model.feature_names]
 
-    # Prédiction de la position finale
-    predicted_positions = model.predict(input_data)
-
-    # Éviter les égalités en ajoutant un très petit bruit aléatoire
-    np.random.seed(42)
-    predicted_positions += np.random.normal(0, 0.0001, size=predicted_positions.shape)
-
-    # Arrondir les positions prédites et s'assurer qu'elles sont dans un intervalle valide
-    predicted_positions = np.round(predicted_positions).astype(int)
-    predicted_positions = np.clip(predicted_positions, 1, 20)
+    # Prédiction du score (position finale)
+    predicted_scores = model.predict(input_data)
 
     # Calculer les scores de confiance
     all_tree_predictions = np.array(
         [tree.predict(input_data) for tree in model.estimators_]
     )
     std_predictions = np.std(all_tree_predictions, axis=0)
-    max_std = std_predictions.max() if std_predictions.max() != 0 else 1
-    confidence_scores = (1 - (std_predictions / max_std)) * 100
+
+    # Option 1 : Utiliser une fonction exponentielle
+    epsilon = 1e-6  # Pour éviter la division par zéro
+    confidence_scores = np.exp(-std_predictions + epsilon)
+    confidence_scores = (confidence_scores / confidence_scores.max()) * 100
     confidence_scores = np.round(confidence_scores, 2)
 
     # Créer un DataFrame avec les résultats
@@ -169,10 +207,16 @@ if st.button("Lancer la simulation"):
         {
             "Pilote": driver_names,
             "Écurie": constructor_names,
-            "Position Prédite": predicted_positions,
+            "Score Prédit": predicted_scores,
             "Confiance (%)": confidence_scores,
         }
     )
+
+    # Classer les pilotes en fonction du score (les scores les plus bas sont meilleurs)
+    results = results.sort_values(by="Score Prédit")
+
+    # Attribuer les positions en fonction du classement
+    results["Position Prédite"] = range(1, len(results) + 1)
 
     # Attribuer les points selon le barème de la F1
     points_distribution = {
@@ -190,9 +234,6 @@ if st.button("Lancer la simulation"):
     results["Points Attribués"] = (
         results["Position Prédite"].map(points_distribution).fillna(0).astype(int)
     )
-
-    # Trier les résultats par position prédite croissante
-    results = results.sort_values(by="Position Prédite")
 
     # Réordonner les colonnes
     results = results[
