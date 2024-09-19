@@ -23,6 +23,7 @@ races = pd.read_csv("races.csv")
 circuits["image_path"] = ""
 image_folder = "images_circuits/"
 image_name_mapping = {
+    "AVUS": "AVUS",
     "bahrein": "Bahrain International Circuit",
     "Jeddah_Corniche": "Jeddah Corniche Circuit",
     "Melbourne": "Albert Park Grand Prix Circuit",
