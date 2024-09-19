@@ -1,5 +1,13 @@
 import pandas as pd
 
+# certains pays sont pas écrit dans le même formats
+country_corrections = {
+    "UK": "United Kingdom",
+    "USA": "United States",
+    "UAE": "United Arab Emirates",
+    "Korea": "South Korea",
+}
+
 
 def readParquet(file):
     return pd.read_parquet(file)
@@ -37,12 +45,12 @@ def get_season(date):
 def get_race_info(races_file, circuits_file):
     races = pd.read_csv(races_file)
     circuits = pd.read_csv(circuits_file)
+    circuits["country"] = circuits["country"].replace(country_corrections)
     races_with_circuits = pd.merge(races, circuits, on="circuitId")
     races_info = races_with_circuits[
         ["raceId", "circuitId", "location", "date", "country"]
     ]
     races_info.loc[:, "date"] = pd.to_datetime(races_info["date"])
-
     return races_info
 
 
@@ -50,21 +58,17 @@ def filter_weather_by_race_info(weather_file, races_info, cities_file, output_fi
     weather_data = pd.read_parquet(weather_file)
     weather_data["date"] = pd.to_datetime(weather_data["date"])
     cities = pd.read_csv(cities_file)
-
     filtered_weather = pd.DataFrame()
-
     for _, race in races_info.iterrows():
         location = race["location"]
         race_date = race["date"]
         circuit_country = race["country"]
         race_id = race["raceId"]
         circuit_id = race["circuitId"]
-
         weather_for_race = weather_data[
             (weather_data["city_name"] == location)
             & (weather_data["date"] == race_date)
         ]
-
         if not weather_for_race.empty:
             print(f"Météo trouvée pour {location} à la date {race_date}")
             weather_for_race["raceId"] = race_id
@@ -81,7 +85,6 @@ def filter_weather_by_race_info(weather_file, races_info, cities_file, output_fi
                 (weather_data["city_name"].isin(cities_in_country))
                 & (weather_data["date"] == race_date)
             ]
-
             if not weather_for_country.empty:
                 avg_weather = weather_for_country.mean(numeric_only=True).round(1)
                 season = get_season(race_date)
@@ -111,7 +114,6 @@ def filter_weather_by_race_info(weather_file, races_info, cities_file, output_fi
                         "circuitId",
                     ]
                 ]
-
                 filtered_weather = pd.concat(
                     [filtered_weather, pd.DataFrame([avg_weather])]
                 )
@@ -119,7 +121,6 @@ def filter_weather_by_race_info(weather_file, races_info, cities_file, output_fi
                 print(
                     f"Aucune donnée météo trouvée pour les villes de {circuit_country} à la date {race_date}. Ignoré."
                 )
-
     filtered_weather.to_csv(output_file, index=False)
     print(f"Les données météo filtrées ont été sauvegardées dans {output_file}")
 

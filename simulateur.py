@@ -95,7 +95,6 @@ model.fit(X_train, y_train)
 # Prédictions sur l'ensemble de test
 y_pred = model.predict(X_test)
 
-# Calcul de l'erreur absolue moyenne
 mae = mean_absolute_error(y_test, y_pred)
 print(f"Erreur absolue moyenne (MAE) : {mae}")
 
