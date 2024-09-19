@@ -56,9 +56,7 @@ for image_name, circuit_name in image_name_mapping.items():
     if not circuit_indices.empty:
         index = circuit_indices[0]
         # Construire le chemin de l'image
-        image_path = os.path.join(
-            image_folder, image_name + ".webp"
-        )  # Ou .png selon le format
+        image_path = os.path.join(image_folder, image_name + ".webp")
         # Mettre à jour le DataFrame
         circuits.at[index, "image_path"] = image_path
 
@@ -77,7 +75,7 @@ selected_circuit = st.selectbox("Sélectionnez un circuit", circuit_names)
 # Récupération des informations du circuit sélectionné
 circuit_info = circuits[circuits["name"] == selected_circuit].iloc[0]
 
-# Affichage de l'image du circuit (si applicable)
+# Affichage de l'image du circuit
 image_path = circuit_info.get("image_path", None)
 if image_path and os.path.exists(image_path):
     st.image(image_path, caption=selected_circuit, use_column_width=True)
@@ -104,11 +102,10 @@ race_ids = races_selected_year["raceId"].unique()
 # Filtrer les résultats pour ces raceId
 results_selected_year = results_data[results_data["raceId"].isin(race_ids)]
 
-# Récupérer les driverId et constructorId
-driver_ids = results_selected_year["driverId"].unique()
-constructor_ids = results_selected_year["constructorId"].unique()
 
 # Filtrer les driverId et constructorId connus du modèle
+driver_ids = results_selected_year["driverId"].unique()
+constructor_ids = results_selected_year["constructorId"].unique()
 known_driver_ids = le_driver.classes_.astype(int)
 driver_ids = np.array([id for id in driver_ids if id in known_driver_ids])
 
@@ -132,12 +129,8 @@ drivers["constructorId"] = drivers["constructorId"].astype(int)
 
 # Filtrer les pilotes pour ne garder que ceux dont le 'constructorId' est connu
 drivers = drivers[drivers["constructorId"].isin(known_constructor_ids)]
-
-# Mettre à jour 'driver_ids' et 'constructor_ids' après le filtrage
 driver_ids = drivers["driverId"].astype(int).values
 constructor_ids = drivers["constructorId"].astype(int).values
-
-# Encoder les 'driverId' et 'constructorId'
 driver_ids_enc = le_driver.transform(driver_ids)
 constructor_ids_enc = le_constructor.transform(constructor_ids)
 
@@ -154,8 +147,6 @@ st.write(f"Nombre de pilotes disponibles pour la simulation : {len(driver_ids)}"
 if st.button("Lancer la simulation"):
     # Préparation des données pour le modèle
     num_drivers = len(driver_ids_enc)
-
-    # Générer des positions de départ moyennes
     grid_positions_data = (
         results_selected_year.groupby("driverId")["grid"].mean().reset_index()
     )
@@ -185,10 +176,9 @@ if st.button("Lancer la simulation"):
         }
     )
 
-    # Réordonner les colonnes selon l'ordre des features du modèle
     input_data = input_data[model.feature_names]
 
-    # Prédiction du score (position finale)
+    # Prédiction du score
     predicted_scores = model.predict(input_data)
 
     # Calculer les scores de confiance
@@ -197,8 +187,7 @@ if st.button("Lancer la simulation"):
     )
     std_predictions = np.std(all_tree_predictions, axis=0)
 
-    # Option 1 : Utiliser une fonction exponentielle
-    epsilon = 1e-6  # Pour éviter la division par zéro
+    epsilon = 1e-6  # Pour éviter la division par zéro (et donc le 0% de confiance)
     confidence_scores = np.exp(-std_predictions + epsilon)
     confidence_scores = (confidence_scores / confidence_scores.max()) * 100
     confidence_scores = np.round(confidence_scores, 2)
@@ -213,7 +202,7 @@ if st.button("Lancer la simulation"):
         }
     )
 
-    # Classer les pilotes en fonction du score (les scores les plus bas sont meilleurs)
+    # Classer les pilotes en fonction du score
     results = results.sort_values(by="Score Prédit")
 
     # Attribuer les positions en fonction du classement
@@ -236,21 +225,14 @@ if st.button("Lancer la simulation"):
         results["Position Prédite"].map(points_distribution).fillna(0).astype(int)
     )
 
-    # Réordonner les colonnes
     results = results[
         ["Position Prédite", "Pilote", "Écurie", "Points Attribués", "Confiance (%)"]
     ]
 
-    # Affichage des résultats pour les pilotes
+    # Affichage des résultats
     st.subheader("Résultats de la Simulation - Pilotes")
     st.write(results.reset_index(drop=True))
-
-    # Calculer les points totaux par écurie
     team_points = results.groupby("Écurie")["Points Attribués"].sum().reset_index()
-
-    # Trier les écuries par points décroissants
     team_points = team_points.sort_values(by="Points Attribués", ascending=False)
-
-    # Affichage des résultats pour les écuries
     st.subheader("Classement des Écuries")
     st.write(team_points.reset_index(drop=True))

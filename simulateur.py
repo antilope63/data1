@@ -12,26 +12,14 @@ drivers = pd.read_csv("drivers.csv")
 
 # -------------------------------- Fusion des données --------------------------------
 
-# Fusion des données de 'races' et 'circuits' sur 'circuitId' sans suffixes
 race_circuit = pd.merge(races, circuits, on="circuitId")
-
-# Fusion des données de 'results' et 'race_circuit' sur 'raceId'
 race_results = pd.merge(results, race_circuit, on="raceId")
-
-# Conversion des dates en datetime
 race_results["date"] = pd.to_datetime(race_results["date"])
 weather["date"] = pd.to_datetime(weather["date"])
-
-# Fusion des données météorologiques avec 'race_results' sur 'raceId' et 'date'
 data = pd.merge(race_results, weather, on=["raceId", "date"], how="left")
-
-# Renommer 'circuitId_x' en 'circuitId'
 data.rename(columns={"circuitId_x": "circuitId"}, inplace=True)
-
-# Supprimer 'circuitId_y' si elle existe
 data.drop(columns=["circuitId_y"], inplace=True, errors="ignore")
 
-# Sélection des colonnes pour 'data_model'
 data_model = data[
     [
         "raceId",
@@ -51,10 +39,8 @@ data_model = data[
     ]
 ]
 
-# Gestion des valeurs manquantes
 data_model = data_model.dropna()
 
-# Encodage de 'constructorId' et 'driverId'
 le_constructor = LabelEncoder()
 data_model["constructorId_enc"] = le_constructor.fit_transform(
     data_model["constructorId"]
@@ -63,7 +49,6 @@ data_model["constructorId_enc"] = le_constructor.fit_transform(
 le_driver = LabelEncoder()
 data_model["driverId_enc"] = le_driver.fit_transform(data_model["driverId"])
 
-# Sélection des features et de la cible
 features = data_model[
     [
         "grid",
@@ -80,7 +65,7 @@ features = data_model[
     ]
 ]
 
-target = data_model["positionOrder"]  # Nous allons prédire la position finale
+target = data_model["positionOrder"]
 
 # -------------------------- Entraînement du Modèle de Prédiction --------------------------
 
@@ -103,10 +88,7 @@ model.fit(X_train, y_train)
 model.feature_names = features.columns.tolist()
 
 
-# Prédictions sur l'ensemble de test
 y_pred = model.predict(X_test)
-
-# Calcul de l'erreur absolue moyenne
 mae = mean_absolute_error(y_test, y_pred)
 print(f"Erreur absolue moyenne (MAE) : {mae}")
 
