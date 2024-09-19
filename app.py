@@ -16,51 +16,15 @@ circuits = pd.read_csv("circuits.csv")
 drivers = pd.read_csv("drivers.csv")
 results_data = pd.read_csv("results.csv")
 constructors = pd.read_csv("constructors.csv")
-
-# Récupérer les driverId connus du LabelEncoder
-known_driver_ids = le_driver.classes_.astype(int)
-
-# Récupérer les constructorId connus du LabelEncoder
-known_constructor_ids = le_constructor.classes_.astype(int)
-
-# Filtrer le DataFrame des drivers pour ne garder que ceux connus
-drivers = drivers[drivers["driverId"].isin(known_driver_ids)]
-
-# Récupérer les constructorId pour chaque driverId à partir des résultats
-driver_constructor = results_data[["driverId", "constructorId"]].drop_duplicates()
-
-# Merge avec 'drivers' pour obtenir 'constructorId' associé
-drivers = drivers.merge(driver_constructor, on="driverId", how="left")
-
-# Supprimer les pilotes sans écurie associée
-drivers = drivers.dropna(subset=["constructorId"])
-
-# Convertir 'constructorId' en entier
-drivers["constructorId"] = drivers["constructorId"].astype(int)
-
-# Filtrer les pilotes pour ne garder que ceux dont le constructorId est connu
-drivers = drivers[drivers["constructorId"].isin(known_constructor_ids)]
-
-# Mettre à jour driver_ids et constructor_ids après le filtrage
-driver_ids = drivers["driverId"].astype(int).values
-constructor_ids = drivers["constructorId"].astype(int).values
-
-# Encoder les driverId et constructorId
-driver_ids_enc = le_driver.transform(driver_ids)
-constructor_ids_enc = le_constructor.transform(constructor_ids)
-
-# Obtenir les noms des pilotes et des écuries
-driver_names = drivers["forename"] + " " + drivers["surname"]
-constructor_names = (
-    constructors.set_index("constructorId").loc[constructor_ids]["name"].values
-)
-
-
-# Encoder les driverId
-driver_ids_enc = le_driver.transform(drivers["driverId"].values)
+races = pd.read_csv("races.csv")
 
 # Titre de l'application
 st.title("Simulateur de F1 avec Conditions Météorologiques")
+
+# Sélection de l'année
+st.subheader("Sélection de l'Année")
+year_options = sorted(races["year"].unique())
+selected_year = st.selectbox("Sélectionnez une année", year_options)
 
 # Sélection du circuit
 circuit_names = circuits["name"].unique()
@@ -89,20 +53,83 @@ avg_wind_speed_kmh = st.slider(
     "Vitesse moyenne du vent (km/h)", min_value=0, max_value=100, value=10
 )
 
+# Récupérer les races de l'année sélectionnée
+races_selected_year = races[races["year"] == selected_year]
+race_ids = races_selected_year["raceId"].unique()
+
+# Filtrer les résultats pour ces raceId
+results_selected_year = results_data[results_data["raceId"].isin(race_ids)]
+
+# Récupérer les driverId et constructorId
+driver_ids = results_selected_year["driverId"].unique()
+constructor_ids = results_selected_year["constructorId"].unique()
+
+# Filtrer les driverId et constructorId connus du modèle
+known_driver_ids = le_driver.classes_.astype(int)
+driver_ids = np.array([id for id in driver_ids if id in known_driver_ids])
+
+known_constructor_ids = le_constructor.classes_.astype(int)
+constructor_ids = np.array(
+    [id for id in constructor_ids if id in known_constructor_ids]
+)
+
+# Filtrer les pilotes et écuries
+drivers = drivers[drivers["driverId"].isin(driver_ids)]
+constructors = constructors[constructors["constructorId"].isin(constructor_ids)]
+
+# Associer les pilotes à leurs écuries
+driver_constructor = results_selected_year[
+    ["driverId", "constructorId"]
+].drop_duplicates()
+drivers = drivers.merge(driver_constructor, on="driverId", how="left")
+
+# Convertir 'constructorId' en entier
+drivers["constructorId"] = drivers["constructorId"].astype(int)
+
+# Filtrer les pilotes pour ne garder que ceux dont le 'constructorId' est connu
+drivers = drivers[drivers["constructorId"].isin(known_constructor_ids)]
+
+# Mettre à jour 'driver_ids' et 'constructor_ids' après le filtrage
+driver_ids = drivers["driverId"].astype(int).values
+constructor_ids = drivers["constructorId"].astype(int).values
+
+# Encoder les 'driverId' et 'constructorId'
+driver_ids_enc = le_driver.transform(driver_ids)
+constructor_ids_enc = le_constructor.transform(constructor_ids)
+
+# Obtenir les noms des pilotes et des écuries
+driver_names = drivers["forename"] + " " + drivers["surname"]
+constructor_names = (
+    constructors.set_index("constructorId").loc[constructor_ids]["name"].values
+)
+
+# Afficher le nombre de pilotes disponibles
+st.write(f"Nombre de pilotes disponibles pour la simulation : {len(driver_ids)}")
+
 # Bouton pour lancer la simulation
 if st.button("Lancer la simulation"):
     # Préparation des données pour le modèle
     num_drivers = len(driver_ids_enc)
 
-    # Générer des positions de départ aléatoires
-    np.random.seed(42)
-    grid_positions = np.random.randint(1, 21, size=num_drivers)
+    # Générer des positions de départ moyennes
+    grid_positions_data = (
+        results_selected_year.groupby("driverId")["grid"].mean().reset_index()
+    )
+    grid_positions_data = drivers[["driverId"]].merge(
+        grid_positions_data, on="driverId", how="left"
+    )
+    grid_positions = (
+        grid_positions_data["grid"]
+        .fillna(grid_positions_data["grid"].mean())
+        .astype(int)
+        .values
+    )
 
     input_data = pd.DataFrame(
         {
             "grid": grid_positions,
             "circuitId": [circuit_info["circuitId"]] * num_drivers,
-            "year": [2024] * num_drivers,
+            "year": [selected_year] * num_drivers,
             "round": [1] * num_drivers,
             "lat": [circuit_info["lat"]] * num_drivers,
             "lng": [circuit_info["lng"]] * num_drivers,
@@ -115,21 +142,7 @@ if st.button("Lancer la simulation"):
     )
 
     # Réordonner les colonnes selon l'ordre des features du modèle
-    input_data = input_data[
-        [
-            "grid",
-            "circuitId",
-            "year",
-            "round",
-            "lat",
-            "lng",
-            "avg_temp_c",
-            "precipitation_mm",
-            "avg_wind_speed_kmh",
-            "constructorId_enc",
-            "driverId_enc",
-        ]
-    ]
+    input_data = input_data[model.feature_names]
 
     # Prédiction de la position finale
     predicted_positions = model.predict(input_data)
@@ -137,9 +150,6 @@ if st.button("Lancer la simulation"):
     # Éviter les égalités en ajoutant un très petit bruit aléatoire
     np.random.seed(42)
     predicted_positions += np.random.normal(0, 0.0001, size=predicted_positions.shape)
-
-    # Afficher les prédictions brutes (optionnel pour le débogage)
-    # st.write("Prédictions brutes :", predicted_positions)
 
     # Arrondir les positions prédites et s'assurer qu'elles sont dans un intervalle valide
     predicted_positions = np.round(predicted_positions).astype(int)
@@ -150,14 +160,14 @@ if st.button("Lancer la simulation"):
         [tree.predict(input_data) for tree in model.estimators_]
     )
     std_predictions = np.std(all_tree_predictions, axis=0)
-    max_std = std_predictions.max()
+    max_std = std_predictions.max() if std_predictions.max() != 0 else 1
     confidence_scores = (1 - (std_predictions / max_std)) * 100
     confidence_scores = np.round(confidence_scores, 2)
 
     # Créer un DataFrame avec les résultats
     results = pd.DataFrame(
         {
-            "Pilote": driver_names.values,
+            "Pilote": driver_names,
             "Écurie": constructor_names,
             "Position Prédite": predicted_positions,
             "Confiance (%)": confidence_scores,
