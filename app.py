@@ -62,7 +62,7 @@ for image_name, circuit_name in image_name_mapping.items():
         circuits.at[index, "image_path"] = image_path
 
 # Titre de l'application
-st.title("Simulateur de F1 avec Conditions Météorologiques")
+st.title("Simulateur de F1")
 
 # Sélection de l'année
 st.subheader("Sélection de l'Année")
