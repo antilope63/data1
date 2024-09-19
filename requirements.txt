@@ -2,3 +2,4 @@ pandas == 2.2.2 # précision de la version car avertissement de pandas sur de fu
 numpy
 scikit-learn
 streamlit
+matplotlib

@@ -8,6 +8,7 @@ circuits = pd.read_csv("circuits.csv")
 races = pd.read_csv("races.csv")
 results = pd.read_csv("results.csv")
 weather = pd.read_csv("filtered_weather.csv")
+drivers = pd.read_csv("drivers.csv")
 
 # -------------------------------- Fusion des données --------------------------------
 
@@ -34,6 +35,7 @@ data.drop(columns=["circuitId_y"], inplace=True, errors="ignore")
 data_model = data[
     [
         "raceId",
+        "driverId",
         "constructorId",
         "grid",
         "positionOrder",
@@ -52,11 +54,14 @@ data_model = data[
 # Gestion des valeurs manquantes
 data_model = data_model.dropna()
 
-# Encodage de 'constructorId'
+# Encodage de 'constructorId' et 'driverId'
 le_constructor = LabelEncoder()
 data_model["constructorId_enc"] = le_constructor.fit_transform(
     data_model["constructorId"]
 )
+
+le_driver = LabelEncoder()
+data_model["driverId_enc"] = le_driver.fit_transform(data_model["driverId"])
 
 # Sélection des features et de la cible
 features = data_model[
@@ -71,9 +76,11 @@ features = data_model[
         "precipitation_mm",
         "avg_wind_speed_kmh",
         "constructorId_enc",
+        "driverId_enc",
     ]
 ]
-target = data_model["points"]
+
+target = data_model["positionOrder"]  # Nous allons prédire la position finale
 
 # -------------------------- Entraînement du Modèle de Prédiction --------------------------
 
@@ -92,12 +99,18 @@ model = RandomForestRegressor(n_estimators=100, random_state=42)
 # Entraînement du modèle
 model.fit(X_train, y_train)
 
+# Sauvegarder les noms des features
+model.feature_names = features.columns.tolist()
+
+
 # Prédictions sur l'ensemble de test
 y_pred = model.predict(X_test)
 
+# Calcul de l'erreur absolue moyenne
 mae = mean_absolute_error(y_test, y_pred)
 print(f"Erreur absolue moyenne (MAE) : {mae}")
 
 # Sauvegarde du modèle entraîné
 joblib.dump(model, "race_predictor_model.pkl")
 joblib.dump(le_constructor, "le_constructor.joblib")
+joblib.dump(le_driver, "le_driver.joblib")
